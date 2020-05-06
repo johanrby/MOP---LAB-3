@@ -9,7 +9,6 @@ __asm__ volatile(" MOV SP,R0\n");
 __asm__ volatile(" BL main\n");					/* call main */
 __asm__ volatile(".L1: B .L1\n");				/* never return */
 }
-
 __attribute__((naked))
 void graphic_initalize(void)
 {
@@ -54,39 +53,40 @@ void graphic_pixel_clear(int x, int y)
 
 void delay_250ns(void){
 	* STK_CTRL = 0;
-	* STK_LOAD = (164/4) - 1;
+	* STK_LOAD = ( (164/4) - 1 );
 	* STK_VAL = 0;
 	* STK_CTRL = 5;
 	while((* STK_CTRL & 0x10000) == 0);
 	* STK_CTRL = 0;	
 }
-void delay_mikro(int us){
-	/*  #ifdef SIMULATOR
-		us = us/1;
-		us++;
-	#endif    */  
-	while ( us > 0)
-		delay_250ns();
-		delay_250ns();
-		delay_250ns();
-		delay_250ns();
-		us--;
-}
-void delay_mili(int ms){
-	
+void delay_mikro(unsigned int us){
 	#ifdef SIMULATOR
-		ms = ms/10000;
+		us = us/100;
+		us++;
+	#endif      
+	while ( us > 0){
+		delay_250ns();
+		delay_250ns();
+		delay_250ns();
+		delay_250ns();
+		us--;		
+	}
+}
+void delay_mili(unsigned int ms){
+	#ifdef SIMULATOR
+		ms = ms/1500;
 		ms++;
 	#endif
 		delay_mikro(ms*1000);		
 }
 
-void app_init(void)
-{	
+void app_init(void){	
 	* GPIO_D_MODER = 0x55005555;		
 	* GPIO_D_PUPDR = 0x00AA0000;	//INPUT is PULL DOWN
 	* GPIO_D_OTYPER = 0x00000000; 	//OUTPUt is PUSH PULL
 	* GPIO_D_OSPEEDR = 0x00000000;  // oklart om denna behövs och hur den ska initieras 
+	
+		
 }
 
 unsigned char keyb(void)
@@ -148,8 +148,7 @@ typedef struct
 } GEOMETRY, *PGEOMETRY;
 
 
-GEOMETRY ball_geometry =
-{
+GEOMETRY ball_geometry ={
  12, 	/* numpoints */
  4,4, 	/* sizex,sizey */
  {
@@ -178,33 +177,42 @@ void draw_ballobject(POBJECT o ){
 void clear_ballobject(POBJECT o){
 	int numpoints = o->geo->numpoints;
 	for (int i = 0; i < numpoints ; i++){
-		graphic_pixel_set( o->posx+o->geo->px[i].x , o->posy+o->geo->px[i].y);
+		graphic_pixel_clear( o->posx+o->geo->px[i].x , o->posy+o->geo->px[i].y);
 	}
 }
-
 
 void move_ballobject(POBJECT o){
 	clear_ballobject( o );
 	short new_x = o->posx + o->dirx; 
 	short new_y = o->posy + o->diry;
-	if ( new_x < 1 ){
-		o->dirx = o->dirx * -1;
+
+	if ( new_x < 1 ){						// objekt påväg över displayens vänstra kant
+		o->dirx = ((o->dirx) * -1);
+		new_x = 128-4;
+		
 	} 
-	if ( (new_x + o->geo->sizex) > 128 ){
-		o->dirx = o->dirx * -1; 
+	if ( (new_x + o->geo->sizex) > 128 ){	// objekt påväg över displayens högra kant
+		o->dirx = ((o->dirx) * -1);
+		new_x = 128-4;
+		
 	}
-	if( new_y < 1 ){
-		o->diry = o->diry * -1; 
+	if( new_y < 1 ){                       // objekt påväg över displayens övre kant
+		o->diry = ((o->diry) * -1); 
+		new_y = 64 - 4;
+
 	}
-	if( (new_y + o->geo->sizey) > 64){
-		o->diry = o->diry * -1; 
+	if( (new_y + o->geo->sizey) > 64){     // objekt påväg över displayens nedre kant
+		o->diry = ((o->diry) * -1);
+		new_y = 64 - 4; 
 	}
+	o->posx = new_x;
+	o->posy = new_y;
 	draw_ballobject( o );	
 }
 
-void set_ballobject_speed(POBJECT o, int speedx , int speedy){
-	o->dirx = speedx;
-	o->diry = speedy;
+void set_ballobject_speed(POBJECT o, int speedX , int speedY){
+	o->dirx = speedX;
+	o->diry = speedY;
 }
 
 
@@ -219,27 +227,28 @@ static OBJECT ball =
 	set_ballobject_speed
 };
 
-
-int main(void)
-{
+int main(void){
 	char c;  
 	POBJECT p = &ball;
-	//init_app();   
+	app_init();   
 	graphic_initalize();
 	graphic_clear_screen();
-   
-while( 1 )
-{
-    p‐>move_ballobject( p );
-    delay_mili(20);
-    c = keyb();
-    switch( c )
-    {
-    case 6: p‐>set_ballobject_speed( p, 3, 0); break;   
-    case 4: p‐>set_ballobject_speed( p, ‐3, 0); break;   
-    case 5: p‐>set_ballobject_speed( p, 0, 0); break;   
-    case 2: p‐>set_ballobject_speed( p, 0, ‐3); break;   
-    case 8: p‐>set_ballobject_speed( p, 0, 3); break;   
-    }
-}
+	
+	/*while (1){
+	//p->set_speed(p,3,0);
+	//p->move(p);
+	}*/
+	
+	while( 1 ){
+		p->move( p );
+		delay_mili(100);
+		c = keyb();
+		switch( c ){
+		case 6: p->set_speed( p, 3, 0); break;   
+		case 4: p->set_speed( p, -3, 0); break;   
+		case 5: p->set_speed( p, 0, 0); break;   
+		case 2: p->set_speed( p, 0, -3); break;   
+		case 8: p->set_speed( p, 0, 3); break;  
+		}
+	}
 }
